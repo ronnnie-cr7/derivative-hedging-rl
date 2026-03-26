@@ -1,132 +1,119 @@
-# Derivative Hedging using Reinforcement Learning
+# 📈 Reinforcement Learning for Derivative Hedging
 
-A complete implementation of an RL agent (PPO) that learns to dynamically hedge a European Call Option — outperforming naive delta hedging strategies.
+This project explores how Reinforcement Learning can be used to solve a real-world quantitative finance problem — **dynamic hedging of a European Call Option**.
 
-## What this project does
-
-When you sell a call option, you take on financial risk. To manage this risk, traders "hedge" by holding shares of the underlying stock. The classic approach is **delta hedging** — always hold exactly Δ shares. But this is expensive due to constant rebalancing.
-
-This project trains a **PPO (Proximal Policy Optimization) RL agent** to learn a smarter hedging strategy that minimizes hedging error while reducing transaction costs.
+Instead of relying on traditional delta hedging, this system trains an RL agent (PPO) to learn a smarter, cost-efficient hedging strategy.
 
 ---
 
-## Project Structure
+## 🚀 Overview
+
+When selling options, traders face continuous risk due to price fluctuations of the underlying asset.
+The standard approach — **delta hedging** — requires frequent rebalancing, which leads to high transaction costs.
+
+In this project, I built an RL-based system that:
+
+* Learns when and how much to hedge
+* Reduces unnecessary trades
+* Minimizes overall hedging error
+
+---
+
+## 🏗️ Project Structure
 
 ```
 derivative_hedging_rl/
-├── phase1_simulation.py   # Simulate stock prices (GBM) + option prices (Black-Scholes)
-├── phase2_environment.py  # Custom OpenAI Gym environment for the RL agent
-├── phase3_training.py     # Train PPO agent + compare vs baselines
-├── app.py                 # Interactive Streamlit dashboard
-├── utils.py               # Shared helper functions
-├── requirements.txt       # Python dependencies
-├── data/                  # Generated: simulated_paths.csv
-├── models/                # Generated: saved PPO model
-└── results/               # Generated: plots and metrics
+├── phase1_simulation.py   # Market simulation (GBM + Black-Scholes)
+├── phase2_environment.py  # Custom Gym RL environment
+├── phase3_training.py     # PPO agent training & evaluation
+├── app.py                 # Streamlit dashboard
+├── utils.py               # Helper functions
+├── requirements.txt
+├── data/
+├── models/
+└── results/
 ```
 
 ---
 
-## Key Concepts
+## 🧠 Core Concepts
 
-| Term | Plain English |
-|------|--------------|
-| **Call Option** | Right to buy a stock at a fixed price in the future |
-| **Strike Price (K)** | The fixed price agreed in the option contract |
-| **Delta (Δ)** | How many shares to hold to hedge the option |
-| **GBM** | Mathematical model for random stock price movement |
-| **Black-Scholes** | Formula to price options and compute delta |
-| **PPO** | RL algorithm that learns the optimal hedging policy |
+* **Call Option** → Right to buy an asset at a fixed price
+* **Delta (Δ)** → Sensitivity of option price to stock price
+* **GBM** → Simulates realistic stock price movement
+* **Black-Scholes** → Used for pricing and delta calculation
+* **PPO (RL Algorithm)** → Learns optimal hedging policy
 
 ---
 
-## Phases
+## ⚙️ How It Works
 
-### Phase 1 — Data Simulation
-- Simulates 1000 stock price paths using **Geometric Brownian Motion (GBM)**
-- Computes option prices and deltas using the **Black-Scholes formula**
-- Saves a rich dataset of `(stock_price, option_price, delta, time_to_expiry)` tuples
+### 🔹 Phase 1 — Simulation
 
-### Phase 2 — RL Environment
-- Custom **OpenAI Gym environment** where the agent lives
-- **State**: `[stock_price, option_price, time_to_expiry, hedge_position, delta]`
-- **Action**: continuous `[-1, 1]` — change in hedge position
-- **Reward**: `−|hedge_position − delta| − transaction_cost`
+* Generate stock price paths using GBM
+* Compute option prices and deltas using Black-Scholes
+* Create dataset for training
 
-### Phase 3 — Agent Training
-- Trains a **PPO agent** with a 2-layer MLP policy (256 neurons each)
-- Splits data into 80% train / 20% test paths
-- Compares RL agent vs **delta naive** and **no-hedge** baselines
+### 🔹 Phase 2 — Environment
 
-### Phase 4 — Dashboard
-- Interactive **Streamlit** dashboard with 4 tabs:
-  1. Stock Simulation — GBM paths + option prices
-  2. Hedging Comparison — strategy comparison on individual paths
-  3. RL vs Delta — aggregate performance metrics + heatmaps
-  4. Black-Scholes Explorer — interactive pricing surface
+* Custom Gym environment designed from scratch
+* State includes market + hedge info
+* Reward penalizes hedging error and transaction cost
 
----
+### 🔹 Phase 3 — Training
 
-## Setup & Installation
+* Train PPO agent using Stable-Baselines3
+* Compare against:
 
-```bash
-# 1. Clone the repo
-git clone https://github.com/YOUR_USERNAME/derivative_hedging_rl.git
-cd derivative_hedging_rl
+  * Delta hedging
+  * No hedging
 
-# 2. Create virtual environment
-python -m venv venv
-source venv/bin/activate       # Linux/Mac
-# venv\Scripts\activate        # Windows
+### 🔹 Phase 4 — Visualization
 
-# 3. Install dependencies
-pip install -r requirements.txt
+* Interactive Streamlit dashboard to explore:
 
-# 4. Run Phase 1 (simulate data)
-python phase1_simulation.py
-
-# 5. Run Phase 2 (test the environment)
-python phase2_environment.py
-
-# 6. Run Phase 3 (train the agent — takes ~5 min)
-python phase3_training.py
-
-# 7. Launch the dashboard
-streamlit run app.py
-```
+  * Price simulations
+  * Strategy comparisons
+  * RL vs baseline performance
 
 ---
 
-## Results
+## 📊 Results
 
-After training, the PPO agent:
-- Achieves **lower hedging error** than naive delta hedging in many scenarios
-- **Reduces transaction costs** by learning to smooth its position changes
-- Generalizes to unseen stock price paths (test set)
+The trained RL agent:
 
----
-
-## Tech Stack
-
-- **Python 3.10+**
-- **NumPy / SciPy** — numerical computing, Black-Scholes
-- **Gymnasium** — RL environment framework
-- **Stable-Baselines3** — PPO implementation
-- **PyTorch** — neural network backend
-- **Streamlit + Plotly** — interactive dashboard
+* Learns smoother hedging strategies
+* Reduces transaction costs compared to delta hedging
+* Performs competitively on unseen data
 
 ---
 
-## Why this is impressive (interview talking points)
+## 🌐 Live Demo
 
-1. **End-to-end RL project** — you built the environment, trained the agent, and evaluated it
-2. **Finance domain** — shows cross-domain knowledge (quant + ML)
-3. **Interactive dashboard** — visual, demo-able, professional
-4. **Proper ML practices** — train/test split, baselines, metrics
-5. **Custom Gym environment** — not just using a pre-built env
+👉 https://kali-derivative-hedging-rlagent.streamlit.app/
 
 ---
 
-## License
+## 🛠️ Tech Stack
 
-MIT License — free to use, modify, and distribute.
+* Python
+* NumPy, SciPy
+* Gymnasium
+* Stable-Baselines3
+* PyTorch
+* Streamlit, Plotly
+
+---
+
+## 💡 Why This Project Matters
+
+* Combines **Machine Learning + Finance**
+* Demonstrates **custom RL environment design**
+* Includes **end-to-end pipeline (simulation → training → deployment)**
+* Built with a focus on **real-world applicability**
+
+---
+
+## 👨‍💻 Author
+
+**Ronit**
