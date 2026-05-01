@@ -20,6 +20,6 @@ COPY utils.py .
 COPY api/ ./api/
 COPY models/ ./models/
 
-EXPOSE 8000
+EXPOSE 7860
 
-CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "7860", "--reload"]
