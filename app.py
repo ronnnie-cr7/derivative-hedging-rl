@@ -11,6 +11,7 @@ Features:
     - See RL agent vs naive delta hedge comparison
     - Adjust parameters with sliders
     - View all plots interactively
+    - AlphaHedge LangGraph Agent
 """
 
 import numpy as np
@@ -20,6 +21,7 @@ import plotly.express as px
 from plotly.subplots import make_subplots
 import streamlit as st
 from scipy.stats import norm
+import requests
 import os
 
 # ──────────────────────────────────────────────────────
@@ -124,11 +126,12 @@ days = np.arange(N)
 # ──────────────────────────────────────────────────────
 # TAB LAYOUT
 # ──────────────────────────────────────────────────────
-tab1, tab2, tab3, tab4 = st.tabs([
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "📊 Stock Simulation",
     "🛡️ Hedging Comparison",
     "🤖 RL vs Delta",
     "📐 Black-Scholes Explorer",
+    "🧠 AlphaHedge Agent",
 ])
 
 
@@ -218,7 +221,7 @@ with tab2:
 
     # Hedging error
     rl_error    = np.abs(rl_path - delta_path)
-    naive_error = np.zeros(N)   # Naive always equals delta by definition
+    naive_error = np.zeros(N)
     nohg_error  = np.abs(delta_path)
 
     col1, col2 = st.columns(2)
@@ -246,7 +249,6 @@ with tab2:
                            height=350, legend=dict(x=0, y=1))
         st.plotly_chart(fig2, use_container_width=True)
 
-    # Hedging error comparison
     fig3 = go.Figure()
     fig3.add_trace(go.Scatter(x=days, y=rl_error, name="RL Agent Error",
                               fill="tozeroy", line=dict(color="#4C72B0"), opacity=0.6))
@@ -257,12 +259,10 @@ with tab2:
                        height=300, legend=dict(x=0, y=1))
     st.plotly_chart(fig3, use_container_width=True)
 
-    # Metrics
     col1, col2, col3 = st.columns(3)
     col1.metric("RL Agent Mean Error",    f"{rl_error.mean():.4f}",
                 delta=f"{rl_error.mean() - naive_error.mean():.4f}")
-    col2.metric("Delta Naive Mean Error", f"{naive_error.mean():.4f}",
-                help="Naive always matches delta, so error = 0 in ideal sense")
+    col2.metric("Delta Naive Mean Error", f"{naive_error.mean():.4f}")
     col3.metric("No Hedge Mean Error",    f"{nohg_error.mean():.4f}")
 
 
@@ -275,7 +275,6 @@ with tab3:
         "Comparing average performance across **all 200 simulated paths**."
     )
 
-    # Compute aggregate metrics
     rl_errors    = []
     naive_errors = []
     nohg_errors  = []
@@ -290,7 +289,6 @@ with tab3:
         naive_errors.append(0.0)
         nohg_errors.append(np.abs(d).mean())
 
-        # Transaction costs: proportional to changes in position
         rl_tx_costs.append(np.abs(np.diff(rl_pos)).sum() * 0.001)
         naive_tx_costs.append(np.abs(np.diff(d)).sum() * 0.001)
 
@@ -303,10 +301,8 @@ with tab3:
     col1.metric("RL Mean Hedging Error",    f"{rl_errors.mean():.4f}")
     col2.metric("No-Hedge Mean Error",      f"{nohg_errors.mean():.4f}")
     col3.metric("RL Transaction Cost",      f"₹{rl_tx_costs.mean():.4f}")
-    col4.metric("Naive Transaction Cost",   f"₹{naive_tx_costs.mean():.4f}",
-                help="Naive rebalances every step — can be expensive")
+    col4.metric("Naive Transaction Cost",   f"₹{naive_tx_costs.mean():.4f}")
 
-    # Error distribution comparison
     fig = go.Figure()
     fig.add_trace(go.Histogram(x=rl_errors, name="RL Agent",
                                marker_color="#4C72B0", opacity=0.7, nbinsx=40))
@@ -321,10 +317,9 @@ with tab3:
     )
     st.plotly_chart(fig, use_container_width=True)
 
-    # Heatmap: delta over time across paths
     st.subheader("Delta Heatmap — All Paths Over Time")
     st.markdown("Each column = one trading day. Each row = one simulated path. Color = delta value.")
-    sample_deltas = all_deltas[:, :50].T   # 50 paths × 252 days
+    sample_deltas = all_deltas[:, :50].T
 
     fig_heat = px.imshow(
         sample_deltas,
@@ -349,7 +344,6 @@ with tab4:
     col1, col2 = st.columns(2)
 
     with col1:
-        # Option price vs stock price
         S_range = np.linspace(50, 200, 200)
         T_fixed = st.slider("Time to Expiry (for this plot)", 0.1, 1.0, 0.5, step=0.05)
 
@@ -371,7 +365,6 @@ with tab4:
         st.plotly_chart(fig, use_container_width=True)
 
     with col2:
-        # Option price over time (theta decay)
         T_range   = np.linspace(1.0, 0.01, 200)
         S_current = st.slider("Current Stock Price (for time decay)", 50, 200, S0)
 
@@ -411,11 +404,112 @@ with tab4:
     )
     st.plotly_chart(fig3, use_container_width=True)
 
+
+# ──────────────────────────────────────────────────────
+# TAB 5: AlphaHedge LangGraph Agent
+# ──────────────────────────────────────────────────────
+with tab5:
+    st.subheader("🧠 AlphaHedge — LangGraph AI Agent")
+    st.markdown(
+        "A 4-node LangGraph agent that monitors market conditions, "
+        "classifies volatility regime, calls the live PPO RL model, "
+        "and generates a professional risk report using an LLM."
+    )
+
+    st.markdown("---")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown("**Market Parameters**")
+        agent_S0    = st.number_input("Stock Price (₹)", value=105.0, step=1.0)
+        agent_K     = st.number_input("Strike Price (₹)", value=100.0, step=1.0)
+        agent_T     = st.number_input("Time to Expiry (years)", value=0.4, step=0.1)
+        agent_sigma = st.number_input("Volatility (σ)", value=0.35, step=0.01)
+        agent_r     = st.number_input("Risk-free Rate", value=0.05, step=0.01)
+
+    with col2:
+        st.markdown("**Agent Pipeline**")
+        st.markdown("""
+        ```
+        Node 1: MarketMonitor
+            ↓
+        Node 2: VolatilityAnalyzer
+            ↓ (if high/medium vol)
+        Node 3: HedgeDecider (PPO RL API)
+            ↓
+        Node 4: ReportGenerator (LLM)
+        ```
+        """)
+        st.markdown("**Volatility Regimes**")
+        st.markdown("""
+        - 🟢 **Low** (σ < 0.15) → Skip hedge
+        - 🟡 **Medium** (0.15 ≤ σ < 0.30) → Hedge
+        - 🔴 **High** (σ ≥ 0.30) → Hedge aggressively
+        """)
+
+    st.markdown("---")
+
+    if st.button("🚀 Run AlphaHedge Agent", type="primary"):
+        with st.spinner("Running LangGraph agent pipeline..."):
+            try:
+                response = requests.post(
+                    "https://ronityadav8905-alphahedge.hf.space/agent/analyze",
+                    json={
+                        "stock_price": agent_S0,
+                        "strike_price": agent_K,
+                        "time_to_expiry": agent_T,
+                        "volatility": agent_sigma,
+                        "risk_free_rate": agent_r
+                    },
+                    timeout=60
+                )
+                result = response.json()
+
+                st.success("✅ Agent pipeline completed!")
+
+                col1, col2, col3 = st.columns(3)
+
+                regime = result["volatility_regime"].upper()
+                regime_color = "🔴" if regime == "HIGH" else "🟡" if regime == "MEDIUM" else "🟢"
+                col1.metric("Volatility Regime", f"{regime_color} {regime}")
+                col2.metric("Should Hedge", "Yes ✅" if result["should_hedge"] else "No ❌")
+                col3.metric("Agent Status", "Complete ✅")
+
+                if result.get("hedge_recommendation"):
+                    st.info(f"**RL Agent Decision:** {result['hedge_recommendation']}")
+                else:
+                    st.info("**RL Agent:** Hedging skipped — volatility too low")
+
+                st.markdown("### 📋 AI Risk Report")
+                st.markdown(
+                    f"""
+                    <div style="background-color:#1e1e2e;padding:20px;
+                    border-radius:10px;border-left:4px solid #4C72B0;
+                    font-size:15px;line-height:1.6;">
+                    {result['risk_report']}
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+
+                st.markdown("---")
+                st.markdown("**🔗 Live API**")
+                st.code("POST https://ronityadav8905-alphahedge.hf.space/agent/analyze")
+
+            except requests.exceptions.Timeout:
+                st.error("Request timed out — HF Spaces may be sleeping.")
+                st.warning("Open https://ronityadav8905-alphahedge.hf.space/docs to wake it up, then try again.")
+            except Exception as e:
+                st.error(f"Agent error: {str(e)}")
+                st.warning("HF Spaces may be sleeping — wait 30 seconds and try again.")
+
+
 # ──────────────────────────────────────────────────────
 # FOOTER
 # ──────────────────────────────────────────────────────
 st.markdown("---")
 st.markdown(
-    "**Built with:** Python · NumPy · SciPy · Stable-Baselines3 · Streamlit · Plotly  |  "
-    "**Project:** Derivative Hedging using Reinforcement Learning"
+    "**Built with:** Python · NumPy · SciPy · Stable-Baselines3 · LangGraph · FastAPI · Streamlit · Plotly  |  "
+    "**Project:** AlphaHedge — RL Derivative Hedging System"
 )
