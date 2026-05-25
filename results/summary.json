@@ -1,0 +1,17 @@
+{
+  "rl_agent": {
+    "mean_error": 0.011252578594661602,
+    "std_error": 0.05124546296611129,
+    "total_reward": -2.880431871886078
+  },
+  "delta_naive": {
+    "mean_error": 0.0,
+    "std_error": 0.0,
+    "total_reward": -0.2510000000000001
+  },
+  "no_hedge": {
+    "mean_error": 0.6452030278884462,
+    "std_error": 0.2889530995298089,
+    "total_reward": -161.94595999999999
+  }
+}

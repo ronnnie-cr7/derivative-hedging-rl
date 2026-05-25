@@ -19,6 +19,7 @@ COPY phase3_training.py .
 COPY utils.py .
 COPY api/ ./api/
 COPY models/ ./models/
+COPY agent/ ./agent/
 
 EXPOSE 7860
 

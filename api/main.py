@@ -1,4 +1,3 @@
-# api/main.py
 import numpy as np
 import pandas as pd
 import os
@@ -7,6 +6,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from stable_baselines3 import PPO
+from agent.graph import hedge_agent
+from pydantic import BaseModel, Field
 
 
 # Add parent directory so we can import your existing code
@@ -234,3 +235,51 @@ async def model_info():
         ],
         "network_architecture": "[256, 256]"
     }
+
+
+# ── ENDPOINT 5: LangGraph Agent ───────────────────────────────────
+class AgentRequest(BaseModel):
+    stock_price: float = Field(..., example=105.0)
+    strike_price: float = Field(..., example=100.0)
+    time_to_expiry: float = Field(..., example=0.4)
+    volatility: float = Field(..., example=0.35)
+    risk_free_rate: float = Field(default=0.05)
+
+class AgentResponse(BaseModel):
+    volatility_regime: str
+    should_hedge: bool
+    hedge_recommendation: str | None
+    risk_report: str
+    error: str | None
+
+@app.post("/agent/analyze", response_model=AgentResponse, tags=["Agent"])
+async def agent_analyze(request: AgentRequest):
+    """
+    Full LangGraph agent pipeline:
+    MarketMonitor → VolatilityAnalyzer → HedgeDecider → ReportGenerator
+    """
+    result = hedge_agent.invoke({
+        "stock_price": request.stock_price,
+        "strike_price": request.strike_price,
+        "time_to_expiry": request.time_to_expiry,
+        "volatility": request.volatility,
+        "risk_free_rate": request.risk_free_rate,
+        "market_data": None,
+        "volatility_regime": None,
+        "should_hedge": None,
+        "rl_action": None,
+        "hedge_recommendation": None,
+        "risk_report": None,
+        "error": None
+    })
+
+    if result.get("error"):
+        raise HTTPException(status_code=500, detail=result["error"])
+
+    return AgentResponse(
+        volatility_regime=result["volatility_regime"],
+        should_hedge=result["should_hedge"],
+        hedge_recommendation=result.get("hedge_recommendation"),
+        risk_report=result["risk_report"],
+        error=result.get("error")
+    )
