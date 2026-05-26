@@ -197,6 +197,4 @@ GROQ_API_KEY=your_groq_key_here
 ## 👨‍💻 Author
 
 **Ronit Yadav** — B.Tech AI/ML, NIT Kurukshetra
-
-[![LinkedIn](https://img.shields.io/badge/LinkedIn-ronit--yadav-blue)](https://linkedin.com/in/ronit-yadav)
 [![GitHub](https://img.shields.io/badge/GitHub-ronnnie--cr7-black)](https://github.com/ronnnie-cr7)
