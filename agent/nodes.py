@@ -9,42 +9,27 @@ from agent.state import HedgeState
 # Initialize LLM
 llm = ChatGroq(model="llama-3.3-70b-versatile")
 
-# live HF Spaces API
-API_BASE = "https://ronityadav8905-alphahedge.hf.space"
+# — call locally since agent runs on same server
+API_BASE = "http://localhost:7860"
 
 # ── NODE 1: Market Monitor ─────────────────────────────────────────
 def market_monitor(state: HedgeState) -> HedgeState:
     """
-    Fetches current market state and checks API health.
+    Packages market state — no HTTP call needed.
     """
     print("[Node 1] Monitoring market conditions...")
 
-    try:
-        # Check if API is alive
-        response = httpx.get(f"{API_BASE}/health", timeout=30)
-        health = response.json()
+    state["market_data"] = {
+        "stock_price": state["stock_price"],
+        "option_price": state["stock_price"] * 0.1,
+        "time_to_expiry": state["time_to_expiry"],
+        "current_hedge_position": 0.0,
+        "delta": 0.5,
+        "volatility": state["volatility"],
+        "risk_free_rate": state["risk_free_rate"]
+    }
 
-        if not health["model_loaded"]:
-            state["error"] = "RL model not loaded on server"
-            return state
-
-        # Package market data for next nodes
-        state["market_data"] = {
-            "stock_price": state["stock_price"],
-            "option_price": state["stock_price"] * 0.1,  # rough estimate
-            "time_to_expiry": state["time_to_expiry"],
-            "current_hedge_position": 0.0,
-            "delta": 0.5,
-            "volatility": state["volatility"],
-            "risk_free_rate": state["risk_free_rate"]
-        }
-
-        print(f"  Market data ready: S={state['stock_price']}, "
-              f"σ={state['volatility']}")
-
-    except Exception as e:
-        state["error"] = f"API unreachable: {str(e)}"
-
+    print(f"  Market data ready: S={state['stock_price']}, σ={state['volatility']}")
     return state
 
 
@@ -73,32 +58,69 @@ def volatility_analyzer(state: HedgeState) -> HedgeState:
     return state
 
 
-# ── NODE 3: Hedge Decider (calls your RL API) ──────────────────────
+# ── NODE 3: Hedge Decider (calls PPO model directly) ──────────────
 def hedge_decider(state: HedgeState) -> HedgeState:
     """
-    Calls your live PPO model via FastAPI to get hedge recommendation.
+    Calls PPO model directly instead of via HTTP API.
     """
-    print("[Node 3] Calling RL agent for hedge decision...")
+    print("[Node 3] Getting hedge decision from RL model...")
 
     try:
-        response = httpx.post(
-            f"{API_BASE}/predict",
-            json=state["market_data"],
-            timeout=30
-        )
-        rl_action = response.json()
-        state["rl_action"] = rl_action
+        import sys
+        import os
+        sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        
+        from stable_baselines3 import PPO
+        import numpy as np
+
+        model = PPO.load("models/ppo_hedging_agent")
+        
+        obs = np.array([
+            state["market_data"]["stock_price"] / 100.0,
+            state["market_data"]["option_price"] / 50.0,
+            state["market_data"]["time_to_expiry"],
+            state["market_data"]["current_hedge_position"],
+            state["market_data"]["delta"]
+        ], dtype=np.float32)
+
+        obs = np.clip(obs, [0.0, 0.0, 0.0, -1.0, 0.0],
+                           [5.0, 5.0, 1.0,  1.0, 1.0])
+
+        action, _ = model.predict(obs, deterministic=True)
+        action_value = float(np.clip(action[0], -1.0, 1.0))
+
+        new_position = float(np.clip(
+            state["market_data"]["current_hedge_position"] + action_value * 0.1,
+            -1.0, 1.0
+        ))
+
+        hedging_error = abs(new_position - state["market_data"]["delta"])
+
+        if action_value > 0.05:
+            strategy = "increase"
+        elif action_value < -0.05:
+            strategy = "decrease"
+        else:
+            strategy = "hold"
+
+        state["rl_action"] = {
+            "recommended_hedge_position": round(new_position, 4),
+            "hedge_action_delta": round(action_value, 4),
+            "hedging_error_vs_bs": round(hedging_error, 4),
+            "strategy": strategy
+        }
 
         state["hedge_recommendation"] = (
-            f"Strategy: {rl_action['strategy'].upper()} | "
-            f"Hedge Position: {rl_action['recommended_hedge_position']} | "
-            f"Error vs BS: {rl_action['hedging_error_vs_bs']}"
+            f"Strategy: {strategy.upper()} | "
+            f"Hedge Position: {round(new_position, 4)} | "
+            f"Error vs BS: {round(hedging_error, 4)}"
         )
 
         print(f"  RL Decision: {state['hedge_recommendation']}")
 
     except Exception as e:
-        state["error"] = f"Prediction failed: {str(e)}"
+        state["error"] = f"Model prediction failed: {str(e)}"
+        print(f"  Error: {str(e)}")
 
     return state
 
