@@ -220,7 +220,7 @@ def comparison_node(state: HedgeState) -> HedgeState:
 def report_generator(state: HedgeState) -> HedgeState:
     print("[Node 5] Generating risk report...")
 
-    context = state.get("comparison", {})
+    context = state.get("comparison") or {}
     scenario_text = ""
     if state.get("scenario_description"):
         scenario_text = (
